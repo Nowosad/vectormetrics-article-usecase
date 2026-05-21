@@ -1,0 +1,160 @@
+```{r}
+#| label: tbl-city_comparison
+#| tbl-cap: Overview of the ten most populous cities in Poland analyzed in the use case
+#| results: asis
+#| warning: false
+#| column-span: full
+cities_df <- data.frame (
+  City = c("Warszawa", "Kraków", "Wrocław", "Łódź", "Poznań", "Gdańsk", "Szczecin", "Lublin", "Bydgoszcz", "Białystok"),
+  Population = c("1 863 845", "810 590", "672 545", "642 590", "534 913", "489 160", "386 706", "328 868", "324 043", "290 386"),
+  Area = c("517.2", "326.85", "292.8", "293.25", "261.91", "683", "300.62", "147.46", "175.96", "102.13"),
+  Population_density = c("3604", "2480", "2297", "2191", "2042", "716", "1286", "2226", "1842", "2843")
+)
+colnames(cities_df) <- c("City", "Population", "Area [km2]", "Pop. density [p/km2]")
+cities_df |>
+  kableExtra::kable(format = "latex", linesep = "", booktabs = TRUE, digits = 3, escape = FALSE, table.envir = "table*") |>
+  kableExtra::row_spec(0, bold = TRUE) |>
+  kableExtra::footnote(general = "Source: Statistics Poland (2024)", general_title = "") #|>
+  # kableExtra::kable_styling(latex_options = c("hold_position", "scale_down"), font_size = 8)
+```
+
+```{r}
+#| label: fig-cities
+#| fig-cap: Location of the ten most populous cities in Poland analyzed in the use case.
+#| fig-asp: 1
+#| fig-ext: pdf
+#| warning: false
+library(sf)
+library(tmap)
+city_points <- read_sf("data/city_points.gpkg")
+woj <- read_sf("data/wojewodztwa.gpkg")
+
+tm_shape(woj) +
+  tm_borders(lwd=0.1, lty="dashed") +
+  tm_shape(city_points) +
+  tm_dots() +
+  tm_labels(text = "name", size = 1.25) +
+  tm_scalebar(position = c("left", "bottom"), breaks = c(0, 50, 100))
+par(
+  mar = c(1, 1, 1, 1),
+  pty = "s"
+)
+```
+
+```{r}
+#| label: tbl-city_means_comparison
+#| tbl-cap: Mean metric values for each city. Values in brackets represent standard deviation for each city and metric.
+#| results: asis
+#| warning: false
+#| column-span: full
+load("data/city_means.RData") #city_means
+load("data/city_metrics.RData") # metrics_long
+
+city_sd <- metrics_long %>%
+  dplyr::group_by(city, metric) %>%
+  dplyr::summarise(sd_val = sd(value, na.rm = TRUE), .groups = "drop") %>%
+  dplyr::mutate(metric = dplyr::recode(metric,
+    "rect" = "Rectangularity",
+    "squareness" = "Squareness",
+    "girth" = "Girth",
+    "elongation" = "Elongation",
+    "fractality" = "Fractality",
+    "shape" = "Shape"
+  ))
+city_means_long <- city_means %>%
+  tidyr::pivot_longer(cols = -City, names_to = "metric", values_to = "mean_val")
+
+combined_data <- city_means_long %>%
+  dplyr::left_join(city_sd, by = c("City" = "city", "metric" = "metric")) %>%
+  dplyr::mutate(display_val = sprintf("%.3f (%.3f)", mean_val, sd_val)) %>%
+  dplyr::select(City, metric, display_val)
+
+city_order <- c("Warszawa", "Kraków", "Wrocław", "Łódź", "Poznań", "Gdańsk", "Szczecin", "Lublin", "Bydgoszcz", "Białystok")
+
+final_table <- combined_data %>%
+  tidyr::pivot_wider(names_from = metric, values_from = display_val) %>%
+  dplyr::mutate(City = factor(City, levels = city_order)) %>%
+  dplyr::arrange(City) %>%
+  dplyr::relocate(City, Rectangularity, Squareness, Girth, Elongation, Fractality, Shape)
+
+final_table %>%
+  kableExtra::kable(format = "latex", linesep = "", booktabs = TRUE, digits = 3, escape = FALSE,
+        table.envir = "table*") %>%
+  kableExtra::row_spec(0, bold = TRUE)
+```
+
+```{r}
+#| label: tbl-metric_popdens_correlation
+#| tbl-cap: Pearson’s correlation between urban metrics of individual built-up areas and population density in the 125m grid
+#| results: asis
+#| warning: false
+library(dplyr)
+library(tidyr)
+library(purrr)
+load("data/correlation_data.RData")
+
+metrics_to_cor <- c("Rectangularity", "Squareness", "Girth", "Elongation", "Fractality", "Shape")
+cor_results <- map_dfr(metrics_to_cor, function(metric_name) {
+  clean_data <- correlation_data %>% 
+    select(all_of(metric_name), Population) %>% 
+    drop_na()
+test_res <- cor.test(clean_data[[metric_name]], clean_data$Population, method = "pearson")
+
+p_val_display <- if(test_res$p.value < 0.001) "< 0.001" else sprintf("%.3f", test_res$p.value)
+tibble(
+    Metric = metric_name,
+    `Pearson Coefficient` = test_res$estimate,
+    `p-value` = p_val_display
+  )
+})
+cor_results |>
+  kableExtra::kable(format = "latex", linesep = "", booktabs = TRUE, digits = 3, escape = FALSE) |>
+  kableExtra::row_spec(0, bold = TRUE)
+```
+
+```{r}
+#| label: fig-radarchart
+#| fig-cap: Normalized median metric values for Łódź, Poznań, Lublin, Warsaw. Metrics are grouped into regular (girth, squareness, rectangularity) and irregular (elongation, fractality, shape) built-up area forms.
+#| fig-asp: 1
+library(fmsb)
+load("data/radarchart_data.RData")
+
+df <- df[c("max", "min", "Łódź", "Poznań", "Lublin", "Warszawa"), c("squareness", "girth", "elongation", "fractality", "shape", "rect")]
+colnames(df) <- c("Squareness", "Girth", "Elongation", "Fractality", "Shape", "Rectangularity")
+colors_border=c(
+  rgb(0.2,0.5,0.5,0.9),
+  rgb(0.8,0.2,0.5,0.9),
+  rgb(0.7,0.5,0.1,0.9),
+  rgb(0.4,0.4,0.8,0.9)
+)
+colors_in=c(
+  rgb(0.2,0.5,0.5,0.4),
+  rgb(0.8,0.2,0.5,0.4),
+  rgb(0.7,0.5,0.1,0.4),
+  rgb(0.4,0.4,0.8,0.4)
+)
+par(
+  mar = c(1, 1, 1, 1),
+  pty = "s"
+)
+radarchart(
+  df,
+  pcol = colors_border,
+  plwd = 1,
+  pfcol = colors_in,
+  plty = 1,
+  cglcol = "grey",
+  cglty = 1,
+  vlcex = 0.8
+)
+legend(
+  x = 0.7, y = 1.3,
+  legend = c("Łódź", "Poznań", "Lublin", "Warsaw"),
+  bty = "n",
+  pch = 20,
+  col = colors_in,
+  text.col = "black",
+  cex = 1,
+  pt.cex = 2
+)
+```

@@ -11,7 +11,7 @@ library(gridExtra)
 library(tidyr)
 library(purrr)
 library(stringi)
-setwd("~/projects/rstudio_server/rstudio-home/data")
+setwd("~/data")
 
 summary_stats <- function(x){
   tibble(
@@ -30,14 +30,19 @@ compute_city_metrics <- function(path){
   city_name <- stri_trans_nfc(city_name)
   message("Processing: ", city_name)
   g <- st_read(path, quiet = TRUE)
-  tibble(
+  # fix geom
+  g <- st_make_valid(g)
+  g <- g[st_area(g) > units::set_units(2, "m^2"), ] # removing weird geoms
+  res <- tibble(
     squareness  = vm_p_square(g)$value,
     elongation  = vm_p_elong(g)$value,
     shape       = vm_p_shape(g)$value,
     girth       = vm_p_girth(g)$value,
     fractality  = vm_p_frac(g)$value,
     rect        = vm_p_rect(g)$value
-  ) %>%
+  ) 
+  res <- res %>%
+    mutate(fractality = ifelse(fractality < 1 | fractality > 2, NA, fractality)) %>% # this might be an overkill, can be removed if results are not looking good
     pivot_longer(
       cols = everything(),
       names_to = "metric",
@@ -74,19 +79,15 @@ city_summary <- metrics_long %>%
   )) %>% 
   arrange(metric)
 
-city_medians <- city_summary %>%
-  select(city, metric, median) %>%
+
+city_medians <- metrics_long %>%
+  group_by(city, metric) %>%
+  summarise(median = median(value, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(
-    did = metric,
+    names_from = metric, 
     values_from = median
   )
 
-city_means <- metrics_long %>%
-  select(city, metric, mean) %>%
-  pivot_wider(
-    did = metric,
-    values_from = mean
-  )
 
 city_means <- metrics_long %>%
   group_by(city, metric) %>%
@@ -143,144 +144,3 @@ df <- rbind(
   df
 )
 save(df, file="radarchart_data.RData")
-
-colors_border=c(
-  rgb(0.2,0.5,0.5,0.9),
-  rgb(0.8,0.2,0.5,0.9),
-  rgb(0.7,0.5,0.1,0.9),
-  rgb(0.4,0.4,0.8,0.9)
-)
-colors_in=c(
-  rgb(0.2,0.5,0.5,0.4),
-  rgb(0.8,0.2,0.5,0.4),
-  rgb(0.7,0.5,0.1,0.4),
-  rgb(0.4,0.4,0.8,0.4)
-)
-par(
-  mar = c(1, 1, 1, 1),
-  pty = "m"
-)
-radarchart(
-  df,
-  pcol = colors_border,
-  plwd = 1,
-  pfcol = colors_in,
-  plty = 1,
-  cglcol = "grey",
-  cglty = 1,
-  cglwd = 0.8,
-  cex.lab = 0.8,
-  cex.axis = 0.8,
-  vlcex = 0.2
-)
-
-legend(
-  x = 0.7, y = 1.2,
-  legend = rownames(df[-c(1,2),]),
-  bty = "n",
-  pch = 20,
-  col = colors_in,
-  text.col = "black",
-  cex = 1,
-  pt.cex = 2
-)
-
-results <- lapply(files, compute_city_metrics)
-city_metrics <- bind_rows(
-  lapply(results, function(x){
-    cbind(city = x$name, as.data.frame(t(x$mean)))
-  })
-)
-
-dir.create("plots", showWarnings = FALSE)
-
-for(i in seq_len(nrow(city_metrics))){
-  city <- city_metrics$city[i]
-  vals <- city_metrics[i, 2:6]
-  df <- rbind(
-    max = rep(1, 5),
-    min = rep(0, 5),
-    values = vals
-  )
-  df[] <- lapply(df, as.numeric)
-  colnames(df) <- c("SQUARE", "ELONG", "GIRTH", "FRAC", "RECT")
-  rownames(df) <- c("max", "min", "city_mean")
-  png(filename = paste0("plots2/", city, "_radar.png"), width=2000, height=2000, res = 300)
-  par(cex = 1.1)
-  par(mar = c(0.1,0.1,0.1,0.1))
-  radarchart(df,
-               pcol = "black",
-               pfcol = alpha("blue", 0.1),
-               plwd = 3,
-               cglcol = "gray", 
-               cglty = 1,
-               cglwd = 1.5,
-              cex.lab = 7,
-             cex.axis = 2.2,
-             calcex=3,
-             # cex.main = 3,
-               seg = 3,
-    # title = city
-  )
-  dev.off()
-}
-
-
-selected_cities <- city_metrics %>% 
-  filter(city %in% c("Gdańsk", "Kraków", "Szczecin"))
-vals <- selected_cities[, 2:6]
-df <- rbind(
-  max = rep(1, 5),
-  min = rep(0, 5),
-  values = vals
-)
-df[] <- lapply(df, as.numeric)
-colnames(df) <- c("SQUARE", "ELONG", "GIRTH", "FRAC", "RECT")
-rownames(df) <- c("max", "min", "Gdańsk", "Kraków", "Szczecin")
-colors_border=c( rgb(0.2,0.5,0.5,0.9), rgb(0.8,0.2,0.5,0.9) , rgb(0.7,0.5,0.1,0.9) )
-colors_in=c( rgb(0.2,0.5,0.5,0.4), rgb(0.8,0.2,0.5,0.4) , rgb(0.7,0.5,0.1,0.4) )
-radarchart(df,
-           pcol=colors_border, #linie color
-           plwd=0.6, # line thickness
-           #pfcol=adjustcolor(colors_in, 1), #fill color
-           pfcol=colors_in,
-           plty=1,# line type
-           cglcol="grey", 
-           cglty=1, 
-           cglwd=0.6 # radarchart line width
-)
-legend(x=0.7, y=1, legend = rownames(df[-c(1,2),]), bty = "n", pch=20 , col=colors_in , text.col = "black", cex=1.2, pt.cex=3)
-
-
-selected_cities <- city_metrics %>% 
-  filter(city %in% c("Warszawa", "Kraków", "Wrocław"))
-vals <- selected_cities[, 2:6]
-df <- rbind(
-  max = rep(1, 5),
-  min = rep(0, 5),
-  values = vals
-)
-df[] <- lapply(df, as.numeric)
-colnames(df) <- c("SQUARE", "ELONG", "GIRTH", "FRAC", "RECT")
-rownames(df) <- c("max", "min", "Kraków", "Warszawa", "Wrocław")
-colors_border=c( rgb(0.2,0.5,0.5,0.9), rgb(0.8,0.2,0.5,0.9) , rgb(0.7,0.5,0.1,0.9) )
-colors_in=c( rgb(0.2,0.5,0.5,0.4), rgb(0.8,0.2,0.5,0.4) , rgb(0.7,0.5,0.1,0.4) )
-par(
-  mar = c(1, 1, 1, 1),  # down, left, up, right
-  pty = "s"            # square plot
-)
-radarchart(df,
-           pcol=colors_border,
-           plwd=1,
-           #pfcol=adjustcolor(colors_in, 1),
-           pfcol=colors_in,
-           plty=1,
-           cglcol="grey", 
-           cglty=1, 
-           cglwd=0.6,
-           cex.lab = 7,
-           cex.axis = 2.2,
-           calcex=3,
-           vlcex = 1.2
-)
-legend(x=0.7, y=1, legend = rownames(df[-c(1,2),]), bty = "n", pch=20 , col=colors_in , text.col = "black", cex=1.2, pt.cex=3)
