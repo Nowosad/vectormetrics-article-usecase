@@ -50,9 +50,9 @@ par(
 load("data/city_means.RData") #city_means
 load("data/city_metrics.RData") # metrics_long
 
-city_sd <- metrics_long %>%
-  dplyr::group_by(city, metric) %>%
-  dplyr::summarise(sd_val = sd(value, na.rm = TRUE), .groups = "drop") %>%
+city_sd <- metrics_long |>
+  dplyr::group_by(city, metric) |>
+  dplyr::summarise(sd_val = sd(value, na.rm = TRUE), .groups = "drop") |>
   dplyr::mutate(metric = dplyr::recode(metric,
     "rect" = "Rectangularity",
     "squareness" = "Squareness",
@@ -61,25 +61,25 @@ city_sd <- metrics_long %>%
     "fractality" = "Fractality",
     "shape" = "Shape"
   ))
-city_means_long <- city_means %>%
+city_means_long <- city_means |>
   tidyr::pivot_longer(cols = -City, names_to = "metric", values_to = "mean_val")
 
-combined_data <- city_means_long %>%
-  dplyr::left_join(city_sd, by = c("City" = "city", "metric" = "metric")) %>%
-  dplyr::mutate(display_val = sprintf("%.3f (%.3f)", mean_val, sd_val)) %>%
+combined_data <- city_means_long |>
+  dplyr::left_join(city_sd, by = c("City" = "city", "metric" = "metric")) |>
+  dplyr::mutate(display_val = sprintf("%.3f (%.3f)", mean_val, sd_val)) |>
   dplyr::select(City, metric, display_val)
 
 city_order <- c("Warszawa", "Kraków", "Wrocław", "Łódź", "Poznań", "Gdańsk", "Szczecin", "Lublin", "Bydgoszcz", "Białystok")
 
-final_table <- combined_data %>%
-  tidyr::pivot_wider(names_from = metric, values_from = display_val) %>%
-  dplyr::mutate(City = factor(City, levels = city_order)) %>%
-  dplyr::arrange(City) %>%
+final_table <- combined_data |>
+  tidyr::pivot_wider(names_from = metric, values_from = display_val) |>
+  dplyr::mutate(City = factor(City, levels = city_order)) |>
+  dplyr::arrange(City) |>
   dplyr::relocate(City, Rectangularity, Squareness, Girth, Elongation, Fractality, Shape)
 
-final_table %>%
+final_table |>
   kableExtra::kable(format = "latex", linesep = "", booktabs = TRUE, digits = 3, escape = FALSE,
-        table.envir = "table*") %>%
+        table.envir = "table*") |>
   kableExtra::row_spec(0, bold = TRUE)
 ```
 
@@ -95,8 +95,8 @@ load("data/correlation_data.RData")
 
 metrics_to_cor <- c("Rectangularity", "Squareness", "Girth", "Elongation", "Fractality", "Shape")
 cor_results <- map_dfr(metrics_to_cor, function(metric_name) {
-  clean_data <- correlation_data %>% 
-    select(all_of(metric_name), Population) %>% 
+  clean_data <- correlation_data |> 
+    select(all_of(metric_name), Population) |> 
     drop_na()
 test_res <- cor.test(clean_data[[metric_name]], clean_data$Population, method = "pearson")
 

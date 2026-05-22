@@ -3,15 +3,6 @@ library(dplyr)
 library(purrr)
 library(stringi)
 library(vectormetrics)
-setwd("~/data")
-
-pop_grid <- st_read("pop_grid/tdvj32680.shp") %>% 
-  st_transform(., 2180)
-
-files <- list.files(
-  pattern = "_footprints\\.gpkg$",
-  full.names = TRUE
-)
 
 process_city_buildings <- function(path) {
   city_name <- gsub("_footprints\\.gpkg", "", basename(path))
@@ -33,25 +24,32 @@ process_city_buildings <- function(path) {
     Rectangularity = vm_p_rect(g)$value
   )
 
-  # TODO discuss if we should stick with centroids
-  # or sum values from all grids that intersect with single builtup area
   g_centroids <- st_centroid(st_geometry(g))
   g_metrics_sf <- st_sf(building_metrics, geometry = g_centroids)
   g_metrics_sf <- st_transform(g_metrics_sf, 2180)
   joined <- st_join(g_metrics_sf, pop_grid, join = st_intersects)
-  output_df <- joined %>% 
-    st_drop_geometry() %>% 
+  output_df <- joined |> 
+    st_drop_geometry() |> 
     as_tibble()
 
   return(output_df)
 }
+unzip("data/pop_grids.zip", exdir = "data/pop_grids")
+
+pop_grid <- st_read("data/pop_grids/tdvj32680.shp") |> 
+  st_transform(2180)
+
+files <- list.files(
+  path = "data",
+  pattern = "_footprints\\.gpkg$",
+  full.names = TRUE
+)
 
 correlation_data <- map_dfr(files, process_city_buildings)
 
-correlation_data <-correlation_data %>% 
-  rename(Population = tot) %>% 
-  filter(!is.na(Population)) %>% 
+correlation_data <- correlation_data |> 
+  rename(Population = tot) |> 
+  filter(!is.na(Population)) |> 
   select(-c(pl_code, code, multipolyg, multipoly1))
-  
 
-save(correlation_data, file = "correlation_data.RData")
+save(correlation_data, file = "data/correlation_data.RData")

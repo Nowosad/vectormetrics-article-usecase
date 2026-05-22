@@ -3,14 +3,12 @@ library(tmap)
 library(vectormetrics)
 library(factoextra)
 
-
-builtup_areas <- get_patches(st_read("Poznań_footprints.gpkg"), class_col="rodzaj")
-tm_shape(builtup_areas) + tm_polygons(fill="rodzaj", col_alpha=0.1) + tm_add_legend(type = "polygons", 
-                                                                                  labels = c("commercial", "single-family residential", "other buildings", "industrial", "multi-family residential"),
-                                                                                  col = c("grey", "#ffffd4", "#fed98e", "#fe9929", "#d95f0e", "#993404"),
-                                                                                  border.lwd = 0.5,
-                                                                                  title = "Types of footprints")
-
+builtup_areas <- get_polygon_patches(st_read("data/Poznań_footprints.gpkg"), class_col="rodzaj")
+# tm_shape(builtup_areas) + tm_polygons(fill="rodzaj", col_alpha=0.1) + tm_add_legend(type = "polygons", 
+#                                                                                    labels = c("commercial", "single-family residential", "other buildings", "industrial", "multi-family residential"),
+#                                                                                    col = c("grey", "#ffffd4", "#fed98e", "#fe9929", "#d95f0e", "#993404"),
+#                                                                                    border.lwd = 0.5,
+#                                                                                    title = "Types of footprints")
 
 builtup_areas$rodzaj <- factor(
   builtup_areas$rodzaj,
@@ -29,12 +27,12 @@ builtup_areas$rodzaj <- factor(
     "multi-family residential"
   )
 )
+
 tm_shape(builtup_areas) +
   tm_polygons(
     fill = "rodzaj",
     col_alpha = 0.1,
-    title = "Types of built-up areas",
-    co
+    title = "Types of built-up areas"
   )
 
 metrics_df <- data.frame(

@@ -11,7 +11,6 @@ library(gridExtra)
 library(tidyr)
 library(purrr)
 library(stringi)
-setwd("~/data")
 
 summary_stats <- function(x){
   tibble(
@@ -41,33 +40,32 @@ compute_city_metrics <- function(path){
     fractality  = vm_p_frac(g)$value,
     rect        = vm_p_rect(g)$value
   ) 
-  res <- res %>%
-    mutate(fractality = ifelse(fractality < 1 | fractality > 2, NA, fractality)) %>% # this might be an overkill, can be removed if results are not looking good
+  res <- res |>
+    mutate(fractality = ifelse(fractality < 1 | fractality > 2, NA, fractality)) |> # this might be an overkill, can be removed if results are not looking good
     pivot_longer(
       cols = everything(),
       names_to = "metric",
       values_to = "value"
-    ) %>%
+    ) |>
     mutate(city = city_name, .before = metric)
 }
 
-
 files <- list.files(
+  path = "data",
   pattern = "_footprints\\.gpkg$",
   full.names = TRUE
 )
 metrics_long <- map_dfr(files, compute_city_metrics)
 
-
-city_summary <- metrics_long %>%
-  group_by(metric) %>%
+city_summary <- metrics_long |>
+  group_by(metric) |>
   summarise(
     Mean = mean(value, na.rm = TRUE),
     Median = median(value, na.rm = TRUE),
     Q25 = quantile(value, 0.25, na.rm = TRUE),
     Q75 = quantile(value, 0.75, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
+  ) |>
   mutate(metric = case_when(
     metric == "elongation" ~ "Elongation",
     metric == "shape" ~ "Shape",
@@ -76,60 +74,58 @@ city_summary <- metrics_long %>%
     metric == "squareness" ~ "Squareness",
     metric == "girth" ~ "Girth",
     TRUE ~ metric
-  )) %>% 
+  )) |> 
   arrange(metric)
 
-
-city_medians <- metrics_long %>%
-  group_by(city, metric) %>%
-  summarise(median = median(value, na.rm = TRUE), .groups = "drop") %>%
+city_medians <- metrics_long |>
+  group_by(city, metric) |>
+  summarise(median = median(value, na.rm = TRUE), .groups = "drop") |>
   pivot_wider(
     names_from = metric, 
     values_from = median
   )
 
-
-city_means <- metrics_long %>%
-  group_by(city, metric) %>%
+city_means <- metrics_long |>
+  group_by(city, metric) |>
   summarise(
     Mean = mean(value, na.rm = TRUE),
     .groups = "drop"
-  ) %>% pivot_wider(
+  ) |> pivot_wider(
     names_from=metric,
     values_from=Mean
-  ) %>% 
+  ) |> 
   setNames(c("City", "Elongation", "Fractality", "Girth", "Rectangularity", "Shape", "Squareness"))
 
-save(city_means, file="city_means.RData")
-save(metrics_long, file="city_metrics.RData")
-save(city_summary, file="city_summary.RData")
-save(city_medians, file="city_medians.RData")
+save(city_means, file="data/city_means.RData")
+save(metrics_long, file="data/city_metrics.RData")
+save(city_summary, file="data/city_summary.RData")
+save(city_medians, file="data/city_medians.RData")
 
-city_summary %>% group_by(metric)
+city_summary |> group_by(metric)
 
-city_medians %>%
-  arrange(desc(girth)) %>%
+city_medians |>
+  arrange(desc(girth)) |>
   slice(1) # Łódź, most compact
 
-city_medians %>%
-  arrange(desc(fractality)) %>%
+city_medians |>
+  arrange(desc(fractality)) |>
   slice(1) # Lublin, most complex
 
-radar_all <- city_medians %>%
+radar_all <- city_medians |>
   pivot_longer(
     cols = -city,
     names_to = "metric",
     values_to = "value"
-  ) %>%
-  group_by(metric) %>%
-  mutate(value_norm = normalize_01(value)) %>%
+  ) |>
+  group_by(metric) |>
+  mutate(value_norm = normalize_01(value)) |>
   ungroup()
-radar_cities <- radar_all %>%
+
+radar_cities <- radar_all |>
   filter(city %in% c("Warszawa", "Poznań", "Łódź", "Lublin"))
 
-
-radar_wide <- radar_cities %>%
-  select(city, metric, value_norm) %>%
+radar_wide <- radar_cities |>
+  select(city, metric, value_norm) |>
   pivot_wider(
     names_from = metric,
     values_from = value_norm
@@ -143,4 +139,4 @@ df <- rbind(
   min = rep(0, ncol(df)),
   df
 )
-save(df, file="radarchart_data.RData")
+save(df, file="data/radarchart_data.RData")
